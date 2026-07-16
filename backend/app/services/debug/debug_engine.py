@@ -100,23 +100,29 @@ class DebugEngine(processing_framework.Engine):
             assert self.processor is not None
             processing_result = self.processor.execute((canonical, analysis_result.data))
             
-            # Stage 4B: Optional LLM Enhancement (if enabled)
+            # Stage 4B: Optional LLM Enhancement (only if low confidence)
             if apply_enhancement:
-                try:
-                    # Pass the original error artifact for better context
-                    error_artifact = canonical.content if isinstance(canonical, DebugArtifact) else str(canonical)
-                    # Cast processor to DebugProcessor to access enhance_with_llm
-                    processor = cast(DebugProcessor, self.processor)
-                    enhanced_result = processor.enhance_with_llm(
-                        processing_result.data,
-                        analysis_result.data,
-                        error_artifact
-                    )
-                    processing_result.data = enhanced_result
-                    processing_result.data["llm_enhanced"] = True
-                except Exception as e:
-                    print(f"LLM enhancement failed: {e}")
-                    processing_result.data["llm_enhanced"] = False
+                confidence = processing_result.data.get("confidence", 1.0)
+                need_llm = processing_result.data.get("need_llm", False)
+                
+                # Only call LLM if confidence is low
+                if need_llm or confidence < 0.7:
+                    try:
+                        print(f"[DEBUG] Confidence {confidence:.0%} - calling LLM for enhancement...")
+                        error_artifact = canonical.content if isinstance(canonical, DebugArtifact) else str(canonical)
+                        processor = cast(DebugProcessor, self.processor)
+                        enhanced_result = processor.enhance_with_llm(
+                            processing_result.data,
+                            analysis_result.data,
+                            error_artifact
+                        )
+                        processing_result.data = enhanced_result
+                        processing_result.data["llm_enhanced"] = True
+                    except Exception as e:
+                        print(f"LLM enhancement failed: {e}")
+                        processing_result.data["llm_enhanced"] = False
+                else:
+                    print(f"[DEBUG] Confidence {confidence:.0%} - High confidence, no LLM needed")
             
             # Stage 5: Format (with processing results)
             format_input = {
