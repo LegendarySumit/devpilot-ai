@@ -114,6 +114,21 @@ class DebugProcessor(processing_framework.Processor):
                 idx_match = re.search(r"\[(\d+)\]", error_content)
                 if idx_match:
                     details["index_value"] = int(idx_match.group(1))
+        else:
+            # For non-Python errors (SQL, etc), extract first line with error as message
+            first_line = error_content.split('\n')[0].strip()
+            if first_line:
+                details["error_message"] = first_line
+                # Try to extract error type from exception format
+                if "." in first_line:
+                    details["error_type"] = first_line.split(":")[0].split(".")[-1].strip()
+        
+        # Fallback: if no error_message found, use first meaningful line
+        if not details["error_message"]:
+            for line in error_content.split('\n'):
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    details["error_message"] = line
         
         return details
     
@@ -388,19 +403,32 @@ class DebugProcessor(processing_framework.Processor):
             )
             
             error_content = error_artifact or processing_result.get("summary", "")
+            confidence = processing_result.get("confidence", 1.0)
             
-            # Only enhance root cause (already have good solution)
+            # Get LLM-based analysis
             enhanced = self._llm_enhancer.enhance_root_cause(
                 metadata, strategy, error_content
             )
             
             processing_result["root_cause"] = enhanced.root_cause
             processing_result["why_it_happened"] = enhanced.why_it_happened
+            
+            # If confidence is very low, also generate solution steps
+            if confidence < 0.6:
+                try:
+                    solution = self._llm_enhancer.enhance_solution(
+                        metadata, strategy, error_content
+                    )
+                    if solution and hasattr(solution, 'steps'):
+                        processing_result["solution_steps"] = solution.steps
+                except Exception as e:
+                    print(f"Failed to generate solution steps: {e}")
+            
             processing_result["llm_enhanced"] = True
             
             return processing_result
         
         except Exception as e:
-            print(f"LLM enhancement failed: {e}")
+            print(f"LLM enhancement error: {e}")
             processing_result["llm_enhanced"] = False
             return processing_result

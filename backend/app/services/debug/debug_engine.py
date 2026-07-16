@@ -38,7 +38,11 @@ class DebugEngine(processing_framework.Engine):
         self.input_adapter = DebugInputAdapter()
         self.analyzer = DebugAnalyzer()
         self.validator = DebugValidator()
-        self.processor = DebugProcessor()
+        
+        # Initialize LLM service for processor
+        from ..llm.llm_service import LLMService
+        llm_service = LLMService()
+        self.processor = DebugProcessor(llm_service=llm_service)
         self.formatter = DebugFormatter()
         
         # Debug engine doesn't use AI enhancement in v1
@@ -108,7 +112,6 @@ class DebugEngine(processing_framework.Engine):
                 # Only call LLM if confidence is low
                 if need_llm or confidence < 0.7:
                     try:
-                        print(f"[DEBUG] Confidence {confidence:.0%} - calling LLM for enhancement...")
                         error_artifact = canonical.content if isinstance(canonical, DebugArtifact) else str(canonical)
                         processor = cast(DebugProcessor, self.processor)
                         enhanced_result = processor.enhance_with_llm(
@@ -121,8 +124,6 @@ class DebugEngine(processing_framework.Engine):
                     except Exception as e:
                         print(f"LLM enhancement failed: {e}")
                         processing_result.data["llm_enhanced"] = False
-                else:
-                    print(f"[DEBUG] Confidence {confidence:.0%} - High confidence, no LLM needed")
             
             # Stage 5: Format (with processing results)
             format_input = {

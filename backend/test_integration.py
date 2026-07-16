@@ -19,7 +19,7 @@ try:
     print(f"OK - LLM Service initialized")
     print(f"    Default provider: {status['default_provider']}")
     
-    print("\n[3] Testing Debug Engine (no LLM)...")
+    print("\n[3] Testing Debug Engine (IndexError - Known Handler)...")
     engine = DebugEngine()
     error = """Traceback (most recent call last):
   File "test.py", line 5, in <module>
@@ -28,24 +28,39 @@ IndexError: list index out of range"""
     
     response = engine.respond(error, apply_enhancement=False)
     print(f"OK - Debug Engine responded")
-    print(f"    Success: {response.success if hasattr(response, 'success') else 'N/A'}")
-    
-    if hasattr(response, 'processing') and response.processing:
+    if response.processing:
         data = response.processing.data if hasattr(response.processing, 'data') else response.processing
-        if isinstance(data, dict):
-            print(f"    Root Cause: {data.get('root_cause', 'N/A')[:60]}")
+        print(f"    Root Cause: {data.get('root_cause', 'N/A')[:60]}...")
+        print(f"    Confidence: {data.get('confidence', 0):.0%}")
     
-    print("\n[4] Testing Debug Engine (WITH LLM)...")
+    print("\n[4] Testing Debug Engine (NameError - Known Handler)...")
+    error = """Traceback (most recent call last):
+  File "main.py", line 7, in get_user
+    return {"id": user_id}
+NameError: name 'user_id' is not defined"""
+    
+    response = engine.respond(error, apply_enhancement=False)
+    print(f"OK - Debug Engine responded")
+    if response.processing:
+        data = response.processing.data if hasattr(response.processing, 'data') else response.processing
+        print(f"    Root Cause: {data.get('root_cause', 'N/A')}")
+        print(f"    Confidence: {data.get('confidence', 0):.0%}")
+    
+    print("\n[5] Testing Debug Engine (SQLAlchemy - UNKNOWN, uses LLM)...")
+    error = """sqlalchemy.exc.IntegrityError:
+(psycopg2.errors.UniqueViolation)
+duplicate key value violates unique constraint "users_email_key"
+
+DETAIL:
+Key (email)=(john@example.com) already exists."""
+    
     response = engine.respond(error, apply_enhancement=True)
     print(f"OK - Debug Engine with LLM responded")
-    print(f"    Success: {response.success if hasattr(response, 'success') else 'N/A'}")
-    
-    if hasattr(response, 'processing') and response.processing:
+    if response.processing:
         data = response.processing.data if hasattr(response.processing, 'data') else response.processing
-        if isinstance(data, dict):
-            print(f"    LLM Enhanced: {data.get('llm_enhanced', False)}")
-            print(f"    Root Cause: {data.get('root_cause', 'N/A')[:60]}")
-            print(f"    Why It Happened: {data.get('why_it_happened', 'N/A')[:80]}")
+        print(f"    Root Cause: {data.get('root_cause', 'N/A')[:80]}...")
+        print(f"    Confidence: {data.get('confidence', 0):.0%}")
+        print(f"    LLM Enhanced: {data.get('llm_enhanced', False)}")
     
     print("\n" + "="*80)
     print("SUCCESS - All tests passed!")
